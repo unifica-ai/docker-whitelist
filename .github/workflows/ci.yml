@@ -88,22 +88,22 @@ jobs:
       # Build and push
       - name: Docker meta for local images
         id: docker_meta_local
-        uses: crazy-max/ghaction-docker-meta@v1
+        uses: docker/metadata-action@v5
         with:
           images: localhost:5000/${{ env.DOCKER_IMAGE_NAME }}
-          tag-edge: true
-          tag-semver: |
-            {{version}}
-            {{major}}
-            {{major}}.{{minor}}
+          tags: |
+            type=edge
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}
+            type=semver,pattern={{major}}.{{minor}}
       - name: Build and push to local (test) registry
         uses: docker/build-push-action@v4
         with:
           context: .
           file: ./Dockerfile
           platforms: |
-            linux/386
             linux/amd64
+            linux/arm64
           load: false
           push: true
           cache-from: type=local,src=/tmp/.buildx-cache
