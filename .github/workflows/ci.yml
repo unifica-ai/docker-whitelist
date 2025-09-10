@@ -25,7 +25,7 @@ env:
   PYTEST_ADDOPTS: ${{ github.event.inputs.pytest_addopts }}
   PYTHONIOENCODING: "UTF-8"
   REGISTRY: ghcr.io
-  
+
 jobs:
   build-test:
     runs-on: ubuntu-22.04
