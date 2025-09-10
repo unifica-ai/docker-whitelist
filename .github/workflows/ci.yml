@@ -24,6 +24,7 @@ env:
   POETRY_VIRTUALENVS_IN_PROJECT: "true"
   PYTEST_ADDOPTS: ${{ github.event.inputs.pytest_addopts }}
   PYTHONIOENCODING: "UTF-8"
+  REGISTRY: ghcr.io
 
 jobs:
   build-test:
@@ -67,7 +68,6 @@ jobs:
           - 5000:5000
     env:
       DOCKER_IMAGE_NAME: ${{ github.repository }}
-      DOCKERHUB_IMAGE_NAME: tecnativa/whitelist
       PUSH: ${{ toJSON(github.event_name != 'pull_request') }}
     steps:
       # Set up Docker Environment
@@ -88,22 +88,22 @@ jobs:
       # Build and push
       - name: Docker meta for local images
         id: docker_meta_local
-        uses: crazy-max/ghaction-docker-meta@v1
+        uses: docker/metadata-action@v5
         with:
           images: localhost:5000/${{ env.DOCKER_IMAGE_NAME }}
-          tag-edge: true
-          tag-semver: |
-            {{version}}
-            {{major}}
-            {{major}}.{{minor}}
+          tags: |
+            type=sha
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}
+            type=semver,pattern={{major}}.{{minor}}
       - name: Build and push to local (test) registry
         uses: docker/build-push-action@v4
         with:
           context: .
           file: ./Dockerfile
           platforms: |
-            linux/386
             linux/amd64
+            linux/arm64
           load: false
           push: true
           cache-from: type=local,src=/tmp/.buildx-cache
@@ -111,32 +111,32 @@ jobs:
           labels: ${{ steps.docker_meta_local.outputs.labels }}
           tags: ${{ steps.docker_meta_local.outputs.tags }}
       # Next jobs only happen outside of pull requests and on main branches
-      - name: Login to DockerHub
-        if: ${{ fromJSON(env.PUSH) }}
-        uses: docker/login-action@v1
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_LOGIN }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Login to GitHub Container Registry
-        if: ${{ fromJSON(env.PUSH) }}
-        uses: docker/login-action@v1
-        with:
-          registry: ghcr.io
-          username: ${{ secrets.BOT_LOGIN }}
-          password: ${{ secrets.BOT_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Docker meta for public images
         if: ${{ fromJSON(env.PUSH) }}
         id: docker_meta_public
-        uses: crazy-max/ghaction-docker-meta@v1
+        uses: docker/metadata-action@v5
         with:
           images: |
             ghcr.io/${{ env.DOCKER_IMAGE_NAME }}
-            ${{ env.DOCKERHUB_IMAGE_NAME }}
-          tag-edge: true
-          tag-semver: |
-            {{version}}
-            {{major}}
-            {{major}}.{{minor}}
+          tags: |
+            # Branch name (for all branches)
+            type=ref,event=branch
+            # PR number (for pull requests)
+            type=ref,event=pr
+            # Git commit SHA (short)
+            type=sha,format=short
+            # Edge tag for default branch
+            type=edge,enable={{is_default_branch}}
+            # Semver tags
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}
+            type=semver,pattern={{major}}.{{minor}}
       - name: Build and push to public registry(s)
         if: ${{ fromJSON(env.PUSH) }}
         uses: docker/build-push-action@v4
@@ -144,8 +144,8 @@ jobs:
           context: .
           file: ./Dockerfile
           platforms: |
-            linux/386
             linux/amd64
+            linux/arm64
           load: false
           push: true
           cache-from: type=local,src=/tmp/.buildx-cache
